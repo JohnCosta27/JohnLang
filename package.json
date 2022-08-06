@@ -2,6 +2,9 @@
   "name": "MyLanguage",
   "version": "0.0.3",
   "module": "src/index.js",
+  "scripts": {
+    "start": "bun src/index.ts"
+  },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^5.32.0",
     "@typescript-eslint/parser": "^5.32.0",
