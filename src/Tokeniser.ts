@@ -1,141 +1,183 @@
-import { InputSteam } from "./InputStream";
+import { InputStreamType } from 'InputStream';
 
-const PuncArray = ['(', ')', '{', '}'];
-type PuncTuple = typeof PuncArray;
-export type Punc = PuncTuple[number];
+const PuncArray = ['(', ')', '{', '}'] as const;
+type Punc = typeof PuncArray[number];
 
 export type Num = number;
 export type Str = string;
 
 const KeywordArray = ['if', 'then', 'lambda', 'true', 'false'] as const;
-type KeywordTuple = typeof KeywordArray;
-export type Keyword = KeywordTuple[number];
+type Keyword = typeof KeywordArray[number];
 
 export type Var = string;
-export type Op = '!=' | '==' | '=';
+
+const OpArray = [
+  '*',
+  '+',
+  '-',
+  '/',
+  '=',
+  '==',
+  '>',
+  '<',
+  '!=',
+  '&',
+  '|',
+  '!',
+  '%',
+] as const;
+type Op = OpArray[number];
 
 type Predicate = (arg0: string) => boolean;
 
-type TokenTypes = 'punc' | 'num' | 'str' | 'keyword' | 'var' | 'op';
-type TokenTypes = {
-  'punc': string;
-  'num': number;
-  'str': string;
+type Token =
+  | {
+      type: 'punc';
+      value: Punc;
+    }
+  | {
+      type: 'num';
+      value: number;
+    }
+  | {
+      type: 'str' | 'var';
+      value: string;
+    }
+  | {
+      type: 'keyword';
+      value: Keyword;
+    }
+  | {
+      type: 'op';
+      value: Op;
+    }
+  | null;
+
+export interface TokenStreamType {
+  readNext: () => Token;
 }
 
-function TokenStream(input: InputSteam) {
-  var current = null;
-  return {
-    next: next,
-    peek: peek,
-    eof: eof,
-    croak: input.croak,
-  };
-  function is_keyword(x: strin): boolean {
-    return KeywordArray.includes(x as Keyword);
-  }
-  function is_digit(ch: string): boolean {
-    return /[0-9]/i.test(ch);
-  }
-  function is_id_start(ch: string): boolean {
-    return /[a-zλ_]/i.test(ch);
-  }
-  function is_id(ch: string): boolean {
-    return is_id_start(ch) || '?!-<>=0123456789'.indexOf(ch) >= 0;
-  }
-  function is_op_char(ch: string): boolean {
-    return '+-*/%=&|<>!'.indexOf(ch) >= 0;
-  }
-  function is_punc(ch: string): boolean {
-    return ',;(){}[]'.indexOf(ch) >= 0;
-  }
-  function is_whitespace(ch: string): boolean {
-    return ' \t\n'.indexOf(ch) >= 0;
-  }
-  function read_while(predicate: Predicate) {
-    var str = '';
+export function TokenStream(input: InputStreamType): TokenStreamType {
+  let current = null;
+
+  const isKeyword = (x: string): boolean => KeywordArray.includes(x as Keyword);
+
+  const isDigit = (ch: string): boolean => /[0-9]/i.test(ch);
+
+  const isIdStart = (ch: string): boolean => /[A-Z_]/i.test(ch);
+
+  const isId = (ch: string): boolean => isIdStart(ch) || /[a-z]/i.test(ch);
+
+  const isOpChar = (ch: string): boolean => OpArray.includes(ch as Op);
+
+  const isPunc = (ch: string): boolean => PuncArray.includes(ch as Punc);
+
+  const isWhitespace = (ch: string): boolean => ' \t\n'.indexOf(ch) >= 0;
+
+  const readWhile = (predicate: Predicate): string => {
+    let str = '';
     while (!input.eof() && predicate(input.peek())) str += input.next();
     return str;
-  }
-  function read_number() {
-    var has_dot = false;
-    var number = read_while((ch: string): boolean => {
-      if (ch == '.') {
-        if (has_dot) return false;
-        has_dot = true;
+  };
+
+  const readNumber = (): Token => {
+    let hasDot = false;
+    const number = readWhile((ch: string): boolean => {
+      if (ch === '.') {
+        if (hasDot) return false;
+        hasDot = true;
         return true;
       }
-      return is_digit(ch);
+      return isDigit(ch);
     });
     return { type: 'num', value: parseFloat(number) };
-  }
-  function read_ident() {
-    var id = read_while(is_id);
+  };
+
+  const readIdent = (): Token => {
+    const id = readWhile(isId);
+    if (isKeyword(id)) {
+      return {
+        type: 'keyword',
+        value: id as Keyword,
+      };
+    }
     return {
-      type: is_keyword(id) ? 'kw' : 'var',
+      type: 'var',
       value: id,
     };
-  }
-  function read_escaped(end) {
-    var escaped = false,
-      str = '';
+  };
+
+  const readEscaped = (end: string) => {
+    let escaped = false;
+    let str = '';
+
     input.next();
     while (!input.eof()) {
-      var ch = input.next();
+      const ch = input.next();
       if (escaped) {
         str += ch;
         escaped = false;
-      } else if (ch == '\\') {
+      } else if (ch === '\\') {
         escaped = true;
-      } else if (ch == end) {
+      } else if (ch === end) {
         break;
       } else {
         str += ch;
       }
     }
     return str;
-  }
-  function read_string() {
-    return { type: 'str', value: read_escaped('"') };
-  }
-  function skip_comment() {
-    read_while(function (ch) {
-      return ch != '\n';
-    });
+  };
+
+  const readString = (): Token => ({ type: 'str', value: readEscaped('"') });
+
+  const skipComment = () => {
+    readWhile((ch: string) => ch !== '\n');
     input.next();
-  }
-  function read_next() {
-    read_while(is_whitespace);
+  };
+
+  const readNext = (): Token => {
+    readWhile(isWhitespace);
     if (input.eof()) return null;
-    var ch = input.peek();
-    if (ch == '#') {
-      skip_comment();
-      return read_next();
+    const ch = input.peek();
+    if (ch === '#') {
+      skipComment();
+      return readNext();
     }
-    if (ch == '"') return read_string();
-    if (is_digit(ch)) return read_number();
-    if (is_id_start(ch)) return read_ident();
-    if (is_punc(ch))
+    if (ch === '"') return readString();
+    if (isDigit(ch)) return readNumber();
+    if (isIdStart(ch)) return readIdent();
+
+    if (isPunc(ch)) {
       return {
         type: 'punc',
-        value: input.next(),
+        value: input.next() as Punc,
       };
-    if (is_op_char(ch))
+    }
+
+    if (isOpChar(ch)) {
       return {
         type: 'op',
-        value: read_while(is_op_char),
+        value: readWhile(isOpChar) as Op,
       };
-    input.croak("Can't handle character: " + ch);
-  }
-  function peek() {
-    return current || (current = read_next());
-  }
-  function next() {
-    var tok = current;
+    }
+    input.croak(`Can't handle character: ${ch}`);
+    return null;
+  };
+
+  const peek = (): string => {
+    if (current === null) {
+      current = readNext();
+    }
+    return current;
+  };
+
+  const next = (): string => {
+    const tok = current;
     current = null;
-    return tok || read_next();
-  }
-  function eof() {
-    return peek() == null;
-  }
+    return tok || readNext();
+  };
+
+  const eof = (): boolean => peek() === null;
+
+  return { readNext };
 }
