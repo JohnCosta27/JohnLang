@@ -1,4 +1,11 @@
-function InputStream(input: string) {
+export interface InputSteam {
+  next: () => string;
+  peek: () => string;
+  eof: () => boolean;
+  croak: (arg0: string) => void;
+}
+
+export function InputStream(input: string): InputSteam {
     var pos = 0, line = 1, col = 0;
     return {
         next: next,
@@ -17,7 +24,7 @@ function InputStream(input: string) {
     function eof() {
         return peek() == "";
     }
-    function croak(msg) {
+    function croak(msg: string) {
         throw new Error(msg + " (" + line + ":" + col + ")");
     }
 }
